@@ -25,6 +25,11 @@ Minimal repository-style setup for training and evaluating the YOLO-RL adapter.
    python eval.py --config config.json
    ```
 
+   To evaluate a specific checkpoint or weights file, pass it explicitly:
+   ```bash
+   python eval.py --config config.json --weights checkpoints/yolo_rl_epoch_3.pt
+   ```
+
 ## Configuration
 
 The project uses config.json plus CLI overrides. Common options include:

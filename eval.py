@@ -16,9 +16,16 @@ def evaluate_model(val_loader, device, current=False, model=None, weights_path=N
     if not current:
         if weights_path is None:
             raise ValueError("weights_path is required when current=False")
-        raw_pytorch_yolo = load_yolo_model(weights_path)
+
+        checkpoint = torch.load(weights_path, map_location=device)
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            state_dict = checkpoint["model_state_dict"]
+        else:
+            state_dict = checkpoint
+
+        raw_pytorch_yolo = load_yolo_model("yolo11n.pt")
         model = YOLO_RL_Adapter(raw_pytorch_yolo).to(device)
-        model.load_state_dict(torch.load(weights_path, map_location=device))
+        model.load_state_dict(state_dict)
 
     if model is None:
         raise ValueError("A model instance is required for evaluation")
