@@ -7,11 +7,10 @@ Minimal repository-style setup for training and evaluating the YOLO-RL adapter.
 1. Create and activate a virtual environment:
    ```bash
    python -m venv .venv
-   .venv\Scripts\Activate.ps1
+   source .venv/bin/activate
    ```
-   If PowerShell blocks the activation script, run:
+   On Windows PowerShell, use:
    ```powershell
-   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
    .venv\Scripts\Activate.ps1
    ```
 2. Install dependencies:
