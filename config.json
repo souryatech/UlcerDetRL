@@ -1,0 +1,15 @@
+{
+  "train": false,
+  "device": "auto",
+  "model_weights": "yolo11n.pt",
+  "learning_rate": 0.001,
+  "alpha": 1,
+  "beta": 0.5,
+  "n_epochs": 10,
+  "checkpoint": 3,
+  "checkpoint_dir": "checkpoints",
+  "batch_size": 1,
+  "img_size": 224,
+  "data_dir": "hyper_kvasir_mock/images",
+  "json_path": "hyper_kvasir_mock/bounding_boxes.json"
+}

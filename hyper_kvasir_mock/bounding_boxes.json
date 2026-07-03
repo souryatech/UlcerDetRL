@@ -1,0 +1,26 @@
+{
+    "polyp_0.jpg": {
+        "xmin": 150,
+        "ymin": 100,
+        "xmax": 250,
+        "ymax": 200
+    },
+    "polyp_1.jpg": {
+        "xmin": 150,
+        "ymin": 100,
+        "xmax": 250,
+        "ymax": 200
+    },
+    "polyp_2.jpg": {
+        "xmin": 150,
+        "ymin": 100,
+        "xmax": 250,
+        "ymax": 200
+    },
+    "polyp_3.jpg": {
+        "xmin": 150,
+        "ymin": 100,
+        "xmax": 250,
+        "ymax": 200
+    }
+}
