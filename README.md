@@ -1,6 +1,6 @@
 # UlcerDetRL
 
-Minimal repository-style setup for training and evaluating the YOLO-RL adapter.
+Setup for training and evaluating the YOLO-MedGemma-RL Adapter. 
 
 ## Quick start
 
