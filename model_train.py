@@ -91,10 +91,14 @@ def main() -> None:
             for i in range(images.size(0)):
                 reward = gemma_model_reward(images[i], sampled_boxes[i], reward_model, reward_processor)
                 rewards.append(reward)
-            rewards = torch.tensor(rewards).to(images.device)
+            rewards = torch.stack(rewards).to(images.device)
 
-            base_reward = rewards.mean()
-            adjusted_rewards = rewards - base_reward
+            if rewards.size(0) > 1:
+                base_reward = rewards.mean()
+                adjusted_rewards = rewards - base_reward
+            else:
+                # If batch size is 1, just use the raw reward directly
+                adjusted_rewards = rewards
             loss_rl = -(log_probs * adjusted_rewards).mean()
             total_loss = (alpha * sup_loss) + (beta * loss_rl)
 
