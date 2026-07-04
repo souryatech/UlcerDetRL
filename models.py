@@ -47,7 +47,8 @@ class YOLO_RL_Adapter(nn.Module):
         
         # Output exactly [Batch, 4] for both means and stds
         means = torch.sigmoid(self.box_mean_head(flat_features)) 
-        stds = torch.nn.functional.softplus(self.box_std_head(flat_features)) + 1e-4 
+        raw_stds = self.box_std_head(flat_features)
+        stds = torch.clamp(torch.nn.functional.softplus(raw_stds), min=0.01, max=0.2)
         return means, stds
 
 
