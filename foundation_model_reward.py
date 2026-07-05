@@ -29,7 +29,7 @@ def gemma_model_reward(image, sampled_box, medgemma_model, processor):
                 "role": "user",
                 "content": [
                     {"type": "image"},
-                    {"type": "text", "text": "Does this endoscopic tissue crop contain a mucosal ulcer? Answer strictly with one word, Yes or No:"},
+                    {"type": "text", "text": "Does this image show a colorectal polyp? Answer strictly with one word, Yes or No:"},
                 ],
             }
         ]
