@@ -100,9 +100,9 @@ def main() -> None:
             sampled_boxes = coord_distribution.sample()
             log_probs = coord_distribution.log_prob(sampled_boxes).sum(dim=-1)
 
-            rewards = torch.zeros(images.size(0), K, device=device)
+            rewards = torch.zeros(images.size(0), 3, device=device)
             for i in range(images.size(0)):
-                for k in range(ds.K):
+                for k in range(3):
                     rewards[i, k] = gemma_model_reward(
                         images[i], sampled_boxes[i, k], reward_model, reward_processor
                     )

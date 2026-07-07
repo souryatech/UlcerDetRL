@@ -8,7 +8,7 @@
   "n_epochs": 90,
   "checkpoint": 10,
   "checkpoint_dir": "checkpoints",
-  "batch_size": 1,
+  "batch_size": 32,
   "img_size": 224,
   "data_dir": "hyper_kvasir_mock/images",
   "json_path": "hyper_kvasir_mock/bounding_boxes.json"
