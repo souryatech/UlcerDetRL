@@ -9,10 +9,11 @@ from torch.utils.data import DataLoader
 from huggingface_hub import login
 
 from config import build_arg_parser, load_config
-from dataloader import HyperKvasirTestDataset
+from dataloader import HyperKvasirTestDataset, variable_box_collate_fn
 from eval import evaluate_model
 from foundation_model_reward import gemma_model_reward
 from models import YOLO_RL_Adapter, load_medgemma_critic, load_yolo_model
+from tools import xywh_to_xyxy, match_boxes   # <-- add this line
 
 
 def main() -> None:
@@ -59,7 +60,7 @@ def main() -> None:
     print("Loading Dataset..")
 
     ds = HyperKvasirTestDataset(img_dir=data_dir, json_path=json_path, img_size=img_size)
-    data_loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=True)
+    data_loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=True, collate_fn=variable_box_collate_fn)
 
     optimizer = optim.Adam(
         [
@@ -76,25 +77,38 @@ def main() -> None:
 
         for batch_idx, (images, gt_boxes) in enumerate(data_loader):
             images = images.to(device)
-            gt_boxes = gt_boxes.to(device)
+            gt_boxes = [g.to(device) for g in gt_boxes]
 
             optimizer.zero_grad()
             means, stds = model(images)
 
-            sup_loss = sup_loss_func(means, gt_boxes)
+            sup_losses = []
+            for b in range(images.size(0)):
+                gt_b = gt_boxes[b]                     # [N_i, 4], xywh
+                if gt_b.size(0) == 0:
+                    continue
+                pred_xyxy = xywh_to_xyxy(means[b])          # [K, 4]
+                gt_xyxy = xywh_to_xyxy(gt_b)                 # [N_i, 4]
+                matched_idx = match_boxes(pred_xyxy, gt_xyxy)
+
+                matched_preds = means[b][matched_idx]        # [N_i, 4], matched xywh preds
+                sup_losses.append(sup_loss_func(matched_preds, gt_b))
+
+            sup_loss = torch.stack(sup_losses).mean()
 
             coord_distribution = Normal(means, stds)
             sampled_boxes = coord_distribution.sample()
             log_probs = coord_distribution.log_prob(sampled_boxes).sum(dim=-1)
 
-            rewards = []
+            rewards = torch.zeros(images.size(0), K, device=device)
             for i in range(images.size(0)):
-                reward = gemma_model_reward(images[i], sampled_boxes[i], reward_model, reward_processor)
-                rewards.append(reward)
-            rewards = torch.stack(rewards).to(images.device)
-
-            if rewards.size(0) > 1:
-                base_reward = rewards.mean()
+                for k in range(ds.K):
+                    rewards[i, k] = gemma_model_reward(
+                        images[i], sampled_boxes[i, k], reward_model, reward_processor
+                    )
+            flat_rewards = rewards.view(-1)
+            if flat_rewards.numel() > 1:
+                base_reward = flat_rewards.mean()
                 adjusted_rewards = rewards - base_reward
             else:
                 # If batch size is 1, just use the raw reward directly

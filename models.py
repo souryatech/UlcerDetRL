@@ -38,18 +38,19 @@ class YOLO_RL_Adapter(nn.Module):
         
         # YOLOv8 nano features output 256 channels
         print("Automatically detected YOLO backbone output channels: 256")
-        self.box_mean_head = nn.Linear(256, 4) 
-        self.box_std_head = nn.Linear(256, 4)
+        K = 3  # max boxes you expect per image, pick based on your data audit
+
+        self.box_mean_head = nn.Linear(256, K * 4)
+        self.box_std_head = nn.Linear(256, K * 4)
 
     def forward(self, x):
         features = self.backbone(x)
         flat_features = self.flatten(self.pool(features))
-        
-        # Output exactly [Batch, 4] for both means and stds
-        means = torch.sigmoid(self.box_mean_head(flat_features)) 
-        raw_stds = self.box_std_head(flat_features)
+
+        means = torch.sigmoid(self.box_mean_head(flat_features)).view(-1, K, 4)
+        raw_stds = self.box_std_head(flat_features).view(-1, K, 4)
         stds = torch.clamp(torch.nn.functional.softplus(raw_stds), min=0.01, max=0.2)
-        return means, stds
+        return means, stds  # [Batch, K, 4] instead of [Batch, 4]
 
 
 def load_medgemma_critic(device="cuda" if torch.cuda.is_available() else "cpu"):

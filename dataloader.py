@@ -34,28 +34,32 @@ class HyperKvasirTestDataset(Dataset):
     def __getitem__(self, idx):
         filename = self.valid_filenames[idx]
         img_path = os.path.join(self.img_dir, filename)
-        
-        # 1. Load Image and track structural dimensions
+
         img = Image.open(img_path).convert("RGB")
         orig_w, orig_h = img.size
-        
-        # Square scaling for deep neural inputs
+
         img_resized = TF.resize(img, [self.img_size, self.img_size])
-        img_tensor = TF.to_tensor(img_resized) # Tensor scale [0.0, 1.0]
-        
-        # 2. Load Absolute Coordinates: [xmin, ymin, xmax, ymax]
-        box_info = self.bbox_data[filename]
-        xmin, ymin, xmax, ymax = box_info['xmin'], box_info['ymin'], box_info['xmax'], box_info['ymax']
-        
-        # 3. Dynamic Conversion to Normalized YOLO [x_center, y_center, width, height]
-        w_box = xmax - xmin
-        h_box = ymax - ymin
-        
-        x_center = (xmin + w_box / 2) / orig_w
-        y_center = (ymin + h_box / 2) / orig_h
-        norm_w = w_box / orig_w
-        norm_h = h_box / orig_h
-        
-        gt_box = torch.tensor([x_center, y_center, norm_w, norm_h], dtype=torch.float32)
-        
-        return img_tensor, gt_box
+        img_tensor = TF.to_tensor(img_resized)
+
+        boxes_info = self.bbox_data[filename]  # now a LIST of box dicts
+        gt_boxes = []
+        for box_info in boxes_info:
+            xmin, ymin, xmax, ymax = box_info['xmin'], box_info['ymin'], box_info['xmax'], box_info['ymax']
+            w_box = xmax - xmin
+            h_box = ymax - ymin
+            x_center = (xmin + w_box / 2) / orig_w
+            y_center = (ymin + h_box / 2) / orig_h
+            norm_w = w_box / orig_w
+            norm_h = h_box / orig_h
+            gt_boxes.append([x_center, y_center, norm_w, norm_h])
+
+        # shape: [N, 4] where N = number of boxes in this image (variable across dataset)
+        gt_boxes = torch.tensor(gt_boxes, dtype=torch.float32)
+
+        return img_tensor, gt_boxes
+
+def variable_box_collate_fn(batch):
+    images, boxes_list = zip(*batch)
+    images = torch.stack(images, dim=0)  # images are all same size, fine to stack
+    # boxes_list stays a tuple of variable-length [N_i, 4] tensors — don't stack
+    return images, list(boxes_list)
