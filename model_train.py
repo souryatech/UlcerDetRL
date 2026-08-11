@@ -8,7 +8,7 @@ from torch.distributions import Normal
 from torch.utils.data import DataLoader
 from huggingface_hub import login
 
-from config import build_arg_parser, load_config
+from config import build_arg_parser, get_device, load_config
 from dataloader import HyperKvasirTestDataset, variable_box_collate_fn
 from eval import evaluate_model
 from foundation_model_reward import gemma_model_reward
@@ -25,10 +25,7 @@ def main() -> None:
         print("Training disabled in config; exiting.")
         return
 
-    if config.get("device", "auto") == "auto":
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    else:
-        device = torch.device(config["device"])
+    device = get_device(config.get("device", "auto"))
 
     learning_rate = float(config.get("learning_rate", 0.001))
     alpha = float(config.get("alpha", 1.0))
@@ -48,7 +45,7 @@ def main() -> None:
     Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
 
     print("Loading detection model...")
-    pytorch_yolo = load_yolo_model(model_weights)
+    pytorch_yolo = load_yolo_model(model_weights, device=device)
     model = YOLO_RL_Adapter(pytorch_yolo).to(device)
     print("Detection model loaded successfully")
 

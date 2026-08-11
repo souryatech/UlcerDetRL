@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
-from config import build_arg_parser, load_config
+from config import build_arg_parser, get_device, load_config
 from dataloader import HyperKvasirTestDataset
 from models import YOLO_RL_Adapter, load_yolo_model
 from tools import xywh_to_xyxy
@@ -23,12 +23,14 @@ def evaluate_model(val_loader, device, current=False, model=None, weights_path=N
         else:
             state_dict = checkpoint
 
-        raw_pytorch_yolo = load_yolo_model("yolo11n.pt")
+        raw_pytorch_yolo = load_yolo_model("yolo11n.pt", device=device)
         model = YOLO_RL_Adapter(raw_pytorch_yolo).to(device)
         model.load_state_dict(state_dict)
 
     if model is None:
         raise ValueError("A model instance is required for evaluation")
+
+    model = model.to(device)
 
     model.eval()
     metric = MeanAveragePrecision(box_format="xyxy", iou_type="bbox")
@@ -78,10 +80,7 @@ def main() -> None:
     args = parser.parse_args()
     config = load_config(args.config, args)
 
-    if config.get("device", "auto") == "auto":
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    else:
-        device = torch.device(config["device"])
+    device = get_device(config.get("device", "auto"))
 
     batch_size = int(config.get("batch_size", 1))
     img_size = int(config.get("img_size", 224))

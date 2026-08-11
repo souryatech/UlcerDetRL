@@ -1,21 +1,26 @@
 from ultralytics import YOLO
 import torch
 import torch.nn as nn
+from typing import Optional
 from transformers import AutoProcessor, AutoModelForImageTextToText
 import torchvision.transforms.functional as TF
 import json
 
-def load_yolo_model(model_path: str) -> YOLO:
+def load_yolo_model(model_path: str, device: Optional[torch.device] = None) -> YOLO:
     """
-    Load a YOLO model from the specified path.
+    Load a YOLO model from the specified path and move it to the selected device.
     Args:
         model_path (str): Path to the YOLO model file.
+        device (torch.device | None): Device to place the model on.
     Returns:
         YOLO: Loaded YOLO model.
     """
     model = YOLO(model_path)
     pytorch_model = model.model
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device(device)
     pytorch_model.to(device)
 
     return pytorch_model
@@ -53,11 +58,16 @@ class YOLO_RL_Adapter(nn.Module):
         return means, stds  # [Batch, K, 4] instead of [Batch, 4]
 
 
-def load_medgemma_critic(device="cuda" if torch.cuda.is_available() else "cpu"):
+def load_medgemma_critic(device: Optional[torch.device] = None):
     print("Loading Multimodal MedGemma 1.5 4B-IT...")
     
     model_id = "google/medgemma-1.5-4b-it"
     
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device(device)
+
     # Load processor (handles text tokenization and medical image scaling)
     processor = AutoProcessor.from_pretrained(model_id)
     # Load the vision-to-language model
