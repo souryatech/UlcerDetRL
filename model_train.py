@@ -1,5 +1,7 @@
 ﻿import os
 from pathlib import Path
+import time
+import math
 
 import torch
 import torch.nn as nn
@@ -68,6 +70,38 @@ def main() -> None:
     )
 
     sup_loss_func = nn.MSELoss()
+
+    # Estimate training time by running one warmup training step (optional).
+    if config.get("estimate_time", True):
+        try:
+            print("Estimating training time via one warmup step...")
+            model.train()
+            it = iter(data_loader)
+            images_w, gt_boxes_w = next(it)
+            images_w = images_w.to(device)
+            gt_boxes_w = [g.to(device) for g in gt_boxes_w]
+
+            optimizer.zero_grad()
+            start = time.perf_counter()
+            means_w, stds_w = model(images_w)
+            # use a simple surrogate loss for timing (no expensive reward call)
+            dummy_target = torch.zeros_like(means_w)
+            sup_loss_est = sup_loss_func(means_w, dummy_target)
+            sup_loss_est.backward()
+            optimizer.step()
+            elapsed = time.perf_counter() - start
+
+            num_samples = len(ds)
+            steps_per_epoch = math.ceil(num_samples / batch_size)
+            total_steps = steps_per_epoch * n_epochs
+            est_total_seconds = elapsed * total_steps
+            est_minutes = est_total_seconds / 60.0
+            est_hours = est_minutes / 60.0
+            print(
+                f"Warmup step time: {elapsed:.3f}s — Estimated total: {est_hours:.2f}h ({est_minutes:.1f}min) over {total_steps} steps"
+            )
+        except Exception as e:
+            print(f"Time estimation skipped: {e}")
 
     for epoch in range(n_epochs):
         print(f"\n--- Starting Epoch {epoch} ---")
