@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 from config import build_arg_parser, get_device, load_config
-from dataloader import HyperKvasirTestDataset
+from dataloader import HyperKvasirTestDataset, variable_box_collate_fn
 from models import YOLO_RL_Adapter, load_yolo_model
 from tools import xywh_to_xyxy
 
@@ -39,27 +39,39 @@ def evaluate_model(val_loader, device, current=False, model=None, weights_path=N
     with torch.no_grad():
         for batch_idx, batch_data in enumerate(val_loader):
             images = batch_data[0].to(device)
-            gt_boxes = batch_data[1].to(device)
+            gt_boxes_list = batch_data[1]  # list of [N_i, 4] tensors
+            gt_boxes_list = [g.to(device) for g in gt_boxes_list]
 
             predicted_means, _ = model(images)
-            pred_boxes_xyxy = xywh_to_xyxy(predicted_means)
-            gt_boxes_xyxy = xywh_to_xyxy(gt_boxes)
+            # predicted_means: [B, K, 4] -> convert to xyxy per-box
+            B, K, _ = predicted_means.size()
+            pred_boxes_flat = predicted_means.view(-1, 4)
+            pred_boxes_xyxy_flat = xywh_to_xyxy(pred_boxes_flat)
+            pred_boxes_xyxy = pred_boxes_xyxy_flat.view(B, K, 4)
+
+            # convert GT boxes (variable per image) to xyxy
+            gt_boxes_xyxy_list = [xywh_to_xyxy(g) for g in gt_boxes_list]
 
             preds = []
             targets = []
 
             for i in range(len(images)):
-                pred_box = pred_boxes_xyxy[i].unsqueeze(0)
-                gt_box = gt_boxes_xyxy[i].unsqueeze(0)
-
+                pred_box = pred_boxes_xyxy[i]  # [K, 4]
+                num_preds = pred_box.size(0)
                 preds.append(
                     {
                         "boxes": pred_box,
-                        "scores": torch.tensor([1.0], device=device),
-                        "labels": torch.tensor([0], device=device),
+                        "scores": torch.ones(num_preds, device=device),
+                        "labels": torch.zeros(num_preds, dtype=torch.int64, device=device),
                     }
                 )
-                targets.append({"boxes": gt_box, "labels": torch.tensor([0], device=device)})
+
+                gt_box = gt_boxes_xyxy_list[i]  # [N_i, 4]
+                num_gt = gt_box.size(0) if gt_box.numel() > 0 else 0
+                if num_gt == 0:
+                    targets.append({"boxes": torch.empty((0, 4), device=device), "labels": torch.empty((0,), dtype=torch.int64, device=device)})
+                else:
+                    targets.append({"boxes": gt_box, "labels": torch.zeros(num_gt, dtype=torch.int64, device=device)})
 
             metric.update(preds, targets)
             print(f"\r  Evaluating Batch {batch_idx + 1}/{len(val_loader)}", end="")
@@ -95,7 +107,13 @@ def main() -> None:
         weights_path = str((Path(__file__).resolve().parent / weights_path).resolve())
 
     ds = HyperKvasirTestDataset(img_dir=data_dir, json_path=json_path, img_size=img_size)
-    val_loader = DataLoader(ds, batch_size=batch_size, shuffle=False, drop_last=False)
+    val_loader = DataLoader(
+        ds,
+        batch_size=batch_size,
+        shuffle=False,
+        drop_last=False,
+        collate_fn=variable_box_collate_fn,
+    )
 
     evaluate_model(val_loader, device, current=False, weights_path=weights_path)
 

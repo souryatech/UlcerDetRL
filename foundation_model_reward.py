@@ -34,7 +34,9 @@ def gemma_model_reward(image, sampled_box, medgemma_model, processor):
             }
         ]
         prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        inputs = processor(text=prompt, images=pil_crop, return_tensors="pt").to(device)
+        inputs = processor(text=prompt, images=pil_crop, return_tensors="pt")
+        # processor returns a dict of tensors; move tensor values to the target device
+        inputs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in inputs.items()}
         yes_token_id = processor.tokenizer.convert_tokens_to_ids("Yes")
         no_token_id = processor.tokenizer.convert_tokens_to_ids("No")
 
