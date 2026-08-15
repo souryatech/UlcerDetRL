@@ -26,7 +26,7 @@ def load_yolo_model(model_path: str, device: Optional[torch.device] = None) -> Y
     return pytorch_model
 
 class YOLO_RL_Adapter(nn.Module):
-    def __init__(self, raw_yolo_model):
+    def __init__(self, raw_yolo_model, K: int = 10):
         super().__init__()
         
         # 1. Steal the backbone (Layers 0-9) from your loaded YOLO model
@@ -43,17 +43,17 @@ class YOLO_RL_Adapter(nn.Module):
         
         # YOLOv8 nano features output 256 channels
         print("Automatically detected YOLO backbone output channels: 256")
-        K = 3  # max boxes you expect per image, pick based on your data audit
+        self.K = int(K)
 
-        self.box_mean_head = nn.Linear(256, 3 * 4)
-        self.box_std_head = nn.Linear(256, 3 * 4)
+        self.box_mean_head = nn.Linear(256, self.K * 4)
+        self.box_std_head = nn.Linear(256, self.K * 4)
 
     def forward(self, x):
         features = self.backbone(x)
         flat_features = self.flatten(self.pool(features))
 
-        means = torch.sigmoid(self.box_mean_head(flat_features)).view(-1, 3, 4)
-        raw_stds = self.box_std_head(flat_features).view(-1, 3, 4)
+        means = torch.sigmoid(self.box_mean_head(flat_features)).view(-1, self.K, 4)
+        raw_stds = self.box_std_head(flat_features).view(-1, self.K, 4)
         stds = torch.clamp(torch.nn.functional.softplus(raw_stds), min=0.01, max=0.2)
         return means, stds  # [Batch, K, 4] instead of [Batch, 4]
 

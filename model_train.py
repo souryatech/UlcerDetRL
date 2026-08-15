@@ -38,6 +38,9 @@ def main() -> None:
     batch_size = int(config.get("batch_size", 1))
     img_size = int(config.get("img_size", 224))
     model_weights = config.get("model_weights", "yolo11n.pt")
+    # VLM crop safety settings
+    min_crop_size = int(config.get("min_crop_size", 16))
+    negative_penalty = float(config.get("negative_penalty", -1.0))
     data_dir = config.get("data_dir", "hyper_kvasir_mock/images")
     json_path = config.get("json_path", "hyper_kvasir_mock/bounding_boxes.json")
 
@@ -46,9 +49,11 @@ def main() -> None:
 
     Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
 
+    max_preds = int(config.get("max_preds", 10))
+
     print("Loading detection model...")
     pytorch_yolo = load_yolo_model(model_weights, device=device)
-    model = YOLO_RL_Adapter(pytorch_yolo).to(device)
+    model = YOLO_RL_Adapter(pytorch_yolo, K=max_preds).to(device)
     print("Detection model loaded successfully")
 
     print("Loading medgemma model...")
@@ -106,6 +111,9 @@ def main() -> None:
     for epoch in range(n_epochs):
         print(f"\n--- Starting Epoch {epoch} ---")
 
+        epoch_invalid_crops = 0
+        epoch_total_crops = 0
+
         for batch_idx, (images, gt_boxes) in enumerate(data_loader):
             images = images.to(device)
             gt_boxes = [g.to(device) for g in gt_boxes]
@@ -131,12 +139,19 @@ def main() -> None:
             sampled_boxes = coord_distribution.sample()
             log_probs = coord_distribution.log_prob(sampled_boxes).sum(dim=-1)
 
-            rewards = torch.zeros(images.size(0), 3, device=device)
+            K = means.size(1)
+            rewards = torch.zeros(images.size(0), K, device=device)
             for i in range(images.size(0)):
-                for k in range(3):
+                for k in range(K):
                     rewards[i, k] = gemma_model_reward(
-                        images[i], sampled_boxes[i, k], reward_model, reward_processor
+                        images[i], sampled_boxes[i, k], reward_model, reward_processor, min_size=min_crop_size, negative_penalty=negative_penalty
                     )
+
+            # diagnostics: count invalid crops in this batch
+            batch_invalid = int(torch.isclose(rewards, torch.tensor(negative_penalty, device=device)).sum().item())
+            batch_total = int(rewards.numel())
+            epoch_invalid_crops += batch_invalid
+            epoch_total_crops += batch_total
             flat_rewards = rewards.view(-1)
             if flat_rewards.numel() > 1:
                 base_reward = flat_rewards.mean()
@@ -151,7 +166,7 @@ def main() -> None:
             optimizer.step()
 
             print(
-                f"\r  Batch {batch_idx + 1}/{len(data_loader)} | Total Loss: {total_loss.item():.3f} | Sup: {sup_loss.item():.3f} | RL: {loss_rl.item():.3f}",
+                f"\r  Batch {batch_idx + 1}/{len(data_loader)} | Total Loss: {total_loss.item():.3f} | Sup: {sup_loss.item():.3f} | RL: {loss_rl.item():.3f} | InvalidCrops: {batch_invalid}/{batch_total}",
                 end="",
             )
 
@@ -167,6 +182,8 @@ def main() -> None:
             }
             torch.save(checkpoint, checkpoint_path)
             print(f" Saved periodic checkpoint to {checkpoint_path}")
+
+        print(f"Epoch {epoch} invalid crops: {epoch_invalid_crops}/{epoch_total_crops}")
 
     print("Training Complete, Evaluating Model..")
     evaluate_model(data_loader, device, model=model, current=True)

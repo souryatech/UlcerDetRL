@@ -11,7 +11,7 @@ from models import YOLO_RL_Adapter, load_yolo_model
 from tools import xywh_to_xyxy
 
 
-def evaluate_model(val_loader, device, current=False, model=None, weights_path=None):
+def evaluate_model(val_loader, device, current=False, model=None, weights_path=None, max_preds: int = 10):
     print("Loading model for evaluation...")
     if not current:
         if weights_path is None:
@@ -24,7 +24,7 @@ def evaluate_model(val_loader, device, current=False, model=None, weights_path=N
             state_dict = checkpoint
 
         raw_pytorch_yolo = load_yolo_model("yolo11n.pt", device=device)
-        model = YOLO_RL_Adapter(raw_pytorch_yolo).to(device)
+        model = YOLO_RL_Adapter(raw_pytorch_yolo, K=max_preds).to(device)
         model.load_state_dict(state_dict)
 
     if model is None:
@@ -106,6 +106,7 @@ def main() -> None:
     if not os.path.isabs(weights_path):
         weights_path = str((Path(__file__).resolve().parent / weights_path).resolve())
 
+    max_preds = int(config.get("max_preds", 10))
     ds = HyperKvasirTestDataset(img_dir=data_dir, json_path=json_path, img_size=img_size)
     val_loader = DataLoader(
         ds,
@@ -115,7 +116,7 @@ def main() -> None:
         collate_fn=variable_box_collate_fn,
     )
 
-    evaluate_model(val_loader, device, current=False, weights_path=weights_path)
+    evaluate_model(val_loader, device, current=False, weights_path=weights_path, max_preds=max_preds)
 
 
 if __name__ == "__main__":
